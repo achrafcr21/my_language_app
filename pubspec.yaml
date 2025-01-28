@@ -1,0 +1,29 @@
+name: my_language_app
+description: Una aplicación de aprendizaje de idiomas con ChatGPT y HeyGen.
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  http: ^1.1.0
+  provider: ^6.0.5
+  firebase_auth: ^4.15.3
+  firebase_core: ^2.24.2
+  hive: ^2.2.3
+  path_provider: ^2.1.1
+  video_player: ^2.8.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
