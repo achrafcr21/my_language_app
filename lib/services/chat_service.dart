@@ -50,8 +50,8 @@ Formato de respuesta:
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: {
+          'Content-Type': 'application/json; charset=UTF-8',
           'Authorization': 'Bearer $_apiKey',
-          'Content-Type': 'application/json',
         },
         body: jsonEncode({
           'model': 'gpt-3.5-turbo',
@@ -62,7 +62,8 @@ Formato de respuesta:
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final decodedResponse = utf8.decode(response.bodyBytes);
+        final data = jsonDecode(decodedResponse);
         final content = data['choices'][0]['message']['content'];
         
         // Añadimos la respuesta al historial

@@ -4,7 +4,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/chat_message.dart';
 import '../services/chat_service.dart';
+import '../services/language_analysis_service.dart';
 import '../providers/language_provider.dart';
+import '../models/exercise.dart';
+import '../screens/exercise_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -19,15 +22,23 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   late ChatService _chatService;
+  final LanguageAnalysisService _languageAnalysis = LanguageAnalysisService();
+  LanguageLevel? _currentLevel;
+  List<String> _suggestedTopics = [];
 
   @override
   void initState() {
     super.initState();
     _chatService = ChatService();
+    _loadSuggestedTopics();
+  }
+
+  Future<void> _loadSuggestedTopics() async {
+    _suggestedTopics = _languageAnalysis.getSuggestedTopics();
+    setState(() {});
   }
 
   Future<void> _sendMessage() async {
-    print('Intentando enviar mensaje...'); // Log para depuración
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
@@ -44,35 +55,28 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
 
     try {
-      final targetLanguage = context.read<LanguageProvider>().targetLanguage;
-      print('Idioma objetivo: $targetLanguage'); // Log para depuración
+      // Analizar el nivel del usuario
+      _currentLevel = await _languageAnalysis.analyzeUserInput(message);
       
+      final targetLanguage = context.read<LanguageProvider>().targetLanguage;
       final response = await _chatService.sendMessage(message, targetLanguage);
-      print('Respuesta recibida: ${response.content}'); // Log para depuración
-
+      
       setState(() {
         _messages.add(response);
         _isLoading = false;
+        _suggestedTopics = _languageAnalysis.getSuggestedTopics();
       });
 
       _scrollToBottom();
-    } catch (e, stackTrace) {
-      print('Error en _sendMessage: $e'); // Log para depuración
-      print('StackTrace: $stackTrace'); // Log para depuración
-      
+    } catch (e) {
       setState(() {
         _isLoading = false;
+        _messages.add(ChatMessage(
+          content: 'Lo siento, ha ocurrido un error. Por favor, intenta de nuevo.',
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
       });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al enviar el mensaje: $e'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
     }
   }
 
@@ -88,6 +92,72 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _showLevelInfo() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nivel de idioma'),
+        content: Text('Tu nivel de idioma es: ${_currentLevel?.name ?? 'Desconocido'}'),
+      ),
+    );
+  }
+
+  void _showSuggestedTopics() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Temas sugeridos'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: _suggestedTopics.map((topic) => ListTile(title: Text(topic))).toList(),
+        ),
+      ),
+    );
+  }
+
+  void _showExercise() {
+    if (_messages.isEmpty) return;
+    
+    final exercise = Exercise.fromContext(
+      context: _messages.last.content,
+      level: _currentLevel?.level ?? 'A1',
+      type: 'multiple-choice',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.9,
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: ExerciseScreen(
+          exercise: exercise,
+          onComplete: (bool wasCorrect) {
+            if (wasCorrect) {
+              _messages.add(ChatMessage(
+                content: '¡Excelente! Has completado el ejercicio correctamente. ¿Te gustaría practicar algo más?',
+                isUser: false,
+                timestamp: DateTime.now(),
+              ));
+            } else {
+              _messages.add(ChatMessage(
+                content: 'No te preocupes, es parte del aprendizaje. ¿Quieres que repasemos este tema?',
+                isUser: false,
+                timestamp: DateTime.now(),
+              ));
+            }
+            setState(() {});
+            _scrollToBottom();
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -96,6 +166,18 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: const Text('Chat de Idiomas'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.fitness_center),
+            onPressed: _showExercise,
+          ),
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: _showLevelInfo,
+          ),
+          IconButton(
+            icon: const Icon(Icons.topic),
+            onPressed: _showSuggestedTopics,
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
             onPressed: () {
