@@ -5,6 +5,8 @@ class LanguageLevel {
   final List<String> strengths;
   final List<String> areasToImprove;
 
+  String get name => level;
+
   LanguageLevel({
     required this.level,
     required this.strengths,

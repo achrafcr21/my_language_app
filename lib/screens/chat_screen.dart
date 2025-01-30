@@ -6,8 +6,8 @@ import '../models/chat_message.dart';
 import '../services/chat_service.dart';
 import '../services/language_analysis_service.dart';
 import '../providers/language_provider.dart';
-import '../models/exercise.dart';
-import '../screens/exercise_screen.dart';
+import '../features/exercises/models/exercise_model.dart';
+import '../features/exercises/screens/exercise_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
