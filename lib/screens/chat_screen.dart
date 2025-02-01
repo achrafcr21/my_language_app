@@ -58,7 +58,8 @@ class _ChatScreenState extends State<ChatScreen> {
       // Analizar el nivel del usuario
       _currentLevel = await _languageAnalysis.analyzeUserInput(message);
       
-      final targetLanguage = context.read<LanguageProvider>().targetLanguage;
+      final languageProvider = context.read<LanguageProvider>();
+      final targetLanguage = languageProvider.targetLanguage ?? 'en';
       final response = await _chatService.sendMessage(message, targetLanguage);
       
       setState(() {
@@ -190,27 +191,34 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.language),
             onPressed: () {
-              print('Botón de idioma presionado'); // Log para depuración
               final languageProvider = context.read<LanguageProvider>();
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('Seleccionar idioma'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: languageProvider.supportedLanguages
-                        .map((lang) => ListTile(
-                              title: Text(lang['name']!),
-                              onTap: () {
-                                print('Idioma seleccionado: ${lang['code']}'); // Log para depuración
-                                languageProvider.setTargetLanguage(lang['code']!);
-                                Navigator.pop(context);
-                              },
-                              trailing: languageProvider.targetLanguage == lang['code']
-                                  ? Icon(Icons.check, color: theme.colorScheme.primary)
-                                  : null,
-                            ))
-                        .toList(),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: languageProvider.supportedLanguages
+                          .map((lang) => ListTile(
+                                title: Text(lang['name']!),
+                                onTap: () {
+                                  languageProvider.setTargetLanguage(lang['code']!);
+                                  Navigator.pop(context);
+                                  setState(() {
+                                    _messages.add(ChatMessage(
+                                      content: 'Idioma cambiado a ${lang['name']}. ¿En qué puedo ayudarte?',
+                                      isUser: false,
+                                      timestamp: DateTime.now(),
+                                    ));
+                                  });
+                                },
+                                trailing: languageProvider.targetLanguage == lang['code']
+                                    ? Icon(Icons.check, color: theme.colorScheme.primary)
+                                    : null,
+                              ))
+                          .toList(),
+                    ),
                   ),
                 ),
               );

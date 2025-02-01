@@ -3,11 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'screens/splash_screen.dart';
+import 'features/onboarding/screens/onboarding_screen.dart';
+import 'screens/main_screen.dart';
 import 'providers/language_provider.dart';
 import 'providers/auth_provider.dart';
+import 'features/progress/providers/progress_provider.dart';
 import 'theme/app_theme.dart';
-import 'features/onboarding/screens/onboarding_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ProgressProvider()),
       ],
       child: const MyApp(),
     ),
@@ -36,29 +38,41 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  Future<bool> _checkFirstTime() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool isFirstTime = prefs.getBool('first_time') ?? true;
+    if (isFirstTime) {
+      await prefs.setBool('first_time', false);
+    }
+    return isFirstTime;
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Language Learning App',
+      title: 'IdeOmas',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
+      debugShowCheckedModeBanner: false,
       home: FutureBuilder<bool>(
-        future: _checkOnboardingStatus(),
+        future: _checkFirstTime(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const SplashScreen();
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
           }
-          return snapshot.data == true
-              ? const SplashScreen()
-              : const OnboardingScreen();
+          
+          if (snapshot.hasData && snapshot.data!) {
+            return const OnboardingScreen();
+          }
+          
+          return const MainScreen();
         },
       ),
     );
-  }
-
-  Future<bool> _checkOnboardingStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('onboarding_complete') ?? false;
   }
 }
