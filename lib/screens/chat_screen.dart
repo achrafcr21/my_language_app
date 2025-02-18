@@ -1,377 +1,510 @@
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import '../models/chat_message.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/chat_service.dart';
-import '../services/language_analysis_service.dart';
+import '../widgets/voice_wave_indicator.dart';
+import '../widgets/animated_chat_bubble.dart';
+import '../models/chat_message.dart';
 import '../providers/language_provider.dart';
-import '../features/exercises/models/exercise_model.dart';
-import '../features/exercises/screens/exercise_screen.dart';
+
+enum ChatMode {
+  text,
+  voice,
+}
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final ChatMode initialMode;
+  
+  const ChatScreen({
+    Key? key,
+    this.initialMode = ChatMode.text,
+  }) : super(key: key);
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
-  final TextEditingController _messageController = TextEditingController();
-  final List<ChatMessage> _messages = [];
+class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
+  final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  bool _isLoading = false;
-  late ChatService _chatService;
-  final LanguageAnalysisService _languageAnalysis = LanguageAnalysisService();
-  LanguageLevel? _currentLevel;
-  List<String> _suggestedTopics = [];
+  final SpeechToText _speech = SpeechToText();
+  final FlutterTts _flutterTts = FlutterTts();
+  final ChatService _chatService = ChatService();
+  
+  bool _isListening = false;
+  bool _isTyping = false;
+  String _textSpeech = '';
+  List<ChatMessage> _messages = [];
+  late ChatMode _currentMode;
+  bool _hasShownWelcome = false;
 
   @override
   void initState() {
     super.initState();
-    _chatService = ChatService();
-    _loadSuggestedTopics();
-  }
-
-  Future<void> _loadSuggestedTopics() async {
-    _suggestedTopics = _languageAnalysis.getSuggestedTopics();
-    setState(() {});
-  }
-
-  Future<void> _sendMessage() async {
-    final message = _messageController.text.trim();
-    if (message.isEmpty) return;
-
-    setState(() {
-      _messages.add(ChatMessage(
-        content: message,
-        isUser: true,
-        timestamp: DateTime.now(),
-      ));
-      _isLoading = true;
+    _initializeTts();
+    _currentMode = widget.initialMode;
+    
+    _chatService.messagesStream.listen((messages) {
+      setState(() {
+        _messages = messages;
+        if (messages.isEmpty && !_hasShownWelcome) {
+          _showWelcomeMessage();
+          _hasShownWelcome = true;
+        }
+        _scrollToBottom();
+      });
     });
 
-    _messageController.clear();
-    _scrollToBottom();
-
-    try {
-      // Analizar el nivel del usuario
-      _currentLevel = await _languageAnalysis.analyzeUserInput(message);
-      
-      final languageProvider = context.read<LanguageProvider>();
-      final targetLanguage = languageProvider.targetLanguage ?? 'en';
-      final response = await _chatService.sendMessage(message, targetLanguage);
-      
-      setState(() {
-        _messages.add(response);
-        _isLoading = false;
-        _suggestedTopics = _languageAnalysis.getSuggestedTopics();
-      });
-
-      _scrollToBottom();
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _messages.add(ChatMessage(
-          content: 'Lo siento, ha ocurrido un error. Por favor, intenta de nuevo.',
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-      });
+    if (_currentMode == ChatMode.voice) {
+      _requestMicrophonePermission();
     }
   }
 
+  void _showWelcomeMessage() {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final languageName = languageProvider.getLanguageName(languageProvider.targetLanguage ?? 'es');
+    
+    final welcomeMessage = ChatMessage(
+      content: '''¡Bienvenido a tu clase de $languageName! 
+
+Estoy aquí para ayudarte a practicar y mejorar tu nivel. Algunas cosas que podemos hacer:
+- Mantener conversaciones en $languageName
+- Practicar gramática y vocabulario
+- Corregir tus errores de manera constructiva
+- Realizar ejercicios específicos
+
+¿En qué te gustaría enfocarte hoy?''',
+      isUser: false,
+      timestamp: DateTime.now(),
+      quickReplies: [
+        "Conversación libre",
+        "Practicar gramática",
+        "Vocabulario nuevo",
+        "Ejercicios de pronunciación"
+      ],
+    );
+    
+    _chatService.addMessage(welcomeMessage);
+  }
+
+  Future<void> _initializeTts() async {
+    await _flutterTts.setLanguage("es-ES");
+    await _flutterTts.setSpeechRate(0.5);
+    await _flutterTts.setVolume(1.0);
+    await _flutterTts.setPitch(1.0);
+  }
+
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  void _showLevelInfo() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nivel de idioma'),
-        content: Text('Tu nivel de idioma es: ${_currentLevel?.name ?? 'Desconocido'}'),
-      ),
-    );
-  }
-
-  void _showSuggestedTopics() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Temas sugeridos'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _suggestedTopics.map((topic) => ListTile(title: Text(topic))).toList(),
-        ),
-      ),
-    );
-  }
-
-  void _showExercise() {
-    if (_messages.isEmpty) return;
-    
-    final exercise = Exercise.fromContext(
-      context: _messages.last.content,
-      level: _currentLevel?.level ?? 'A1',
-      type: 'multiple-choice',
-    );
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: ExerciseScreen(
-          exercise: exercise,
-          onComplete: (bool wasCorrect) {
-            if (wasCorrect) {
-              _messages.add(ChatMessage(
-                content: '¡Excelente! Has completado el ejercicio correctamente. ¿Te gustaría practicar algo más?',
-                isUser: false,
-                timestamp: DateTime.now(),
-              ));
-            } else {
-              _messages.add(ChatMessage(
-                content: 'No te preocupes, es parte del aprendizaje. ¿Quieres que repasemos este tema?',
-                isUser: false,
-                timestamp: DateTime.now(),
-              ));
-            }
-            setState(() {});
-            _scrollToBottom();
-          },
-        ),
-      ),
-    );
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chat de Idiomas'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.fitness_center),
-            onPressed: _showExercise,
-          ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: _showLevelInfo,
-          ),
-          IconButton(
-            icon: const Icon(Icons.topic),
-            onPressed: _showSuggestedTopics,
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () {
-              setState(() {
-                _messages.clear();
-                _chatService.clearConversation();
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.language),
-            onPressed: () {
-              final languageProvider = context.read<LanguageProvider>();
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Seleccionar idioma'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: languageProvider.supportedLanguages
-                          .map((lang) => ListTile(
-                                title: Text(lang['name']!),
-                                onTap: () {
-                                  languageProvider.setTargetLanguage(lang['code']!);
-                                  Navigator.pop(context);
-                                  setState(() {
-                                    _messages.add(ChatMessage(
-                                      content: 'Idioma cambiado a ${lang['name']}. ¿En qué puedo ayudarte?',
-                                      isUser: false,
-                                      timestamp: DateTime.now(),
-                                    ));
-                                  });
-                                },
-                                trailing: languageProvider.targetLanguage == lang['code']
-                                    ? Icon(Icons.check, color: theme.colorScheme.primary)
-                                    : null,
-                              ))
-                          .toList(),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return _MessageBubble(message: message)
-                    .animate()
-                    .fade()
-                    .scale(delay: 200.ms);
-              },
-            ),
-          ),
-          if (_isLoading)
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Escribiendo'),
-                  const SizedBox(width: 8),
-                  ...List.generate(3, (index) {
-                    return Container(
-                      width: 4,
-                      height: 4,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                    ).animate(
-                      onPlay: (controller) => controller.repeat(),
-                    ).scale(
-                      duration: 600.ms,
-                      delay: (index * 200).ms,
-                      curve: Curves.easeInOut,
-                    );
-                  }),
-                ],
-              ),
-            ),
-          _buildMessageInput(theme),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageInput(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            offset: const Offset(0, -2),
-            blurRadius: 4,
-            color: Colors.black.withOpacity(0.1),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              decoration: InputDecoration(
-                hintText: 'Escribe tu mensaje...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: theme.colorScheme.surfaceVariant,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
-              ),
-              maxLines: null,
-              textCapitalization: TextCapitalization.sentences,
-              onSubmitted: (_) => _sendMessage(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          FloatingActionButton(
-            onPressed: _sendMessage,
-            elevation: 0,
-            child: const Icon(Icons.send),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  final ChatMessage message;
-
-  const _MessageBubble({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isUser = message.isUser;
-
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
+      appBar: _buildAppBar(theme),
+      body: Container(
         decoration: BoxDecoration(
-          color: isUser
-              ? theme.colorScheme.primary
-              : theme.colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              theme.scaffoldBackgroundColor,
+              theme.primaryColor.withOpacity(0.05),
+            ],
+          ),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            MarkdownBody(
-              data: message.content,
-              styleSheet: MarkdownStyleSheet(
-                p: TextStyle(
-                  color: isUser
-                      ? Colors.white
-                      : theme.colorScheme.onSecondaryContainer,
-                ),
-                code: TextStyle(
-                  backgroundColor: isUser
-                      ? theme.colorScheme.primaryContainer
-                      : theme.colorScheme.tertiaryContainer,
-                  color: isUser
-                      ? theme.colorScheme.onPrimaryContainer
-                      : theme.colorScheme.onTertiaryContainer,
-                ),
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                itemCount: _messages.length,
+                itemBuilder: (context, index) {
+                  final message = _messages[index];
+                  return _buildAnimatedMessage(message, index);
+                },
               ),
             ),
+            if (_isTyping)
+              Container(
+                padding: const EdgeInsets.all(8),
+                child: SpinKitThreeBounce(
+                  color: theme.primaryColor,
+                  size: 16,
+                ),
+              ).animate()
+                .fade()
+                .scale(),
+            if (_currentMode == ChatMode.voice && _isListening)
+              _buildVoiceModeIndicator(),
+            _buildInputArea(theme),
           ],
         ),
       ),
     );
+  }
+
+  PreferredSizeWidget _buildAppBar(ThemeData theme) {
+    return AppBar(
+      elevation: 0,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      title: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: theme.primaryColor.withOpacity(0.1),
+            child: Icon(
+              Icons.school,
+              color: theme.primaryColor,
+            ),
+          ).animate()
+            .fade(duration: 500.ms)
+            .scale(delay: 200.ms),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Tu Profesor',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Consumer<LanguageProvider>(
+                builder: (context, provider, child) {
+                  return Text(
+                    'Nivel B2 • ${provider.getLanguageName(provider.targetLanguage ?? 'es')}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.textTheme.bodySmall?.color,
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.more_vert),
+          onPressed: () => _showOptionsMenu(context),
+        ),
+      ],
+    );
+  }
+
+  void _showOptionsMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.delete_outline),
+            title: const Text('Limpiar conversación'),
+            onTap: () {
+              Navigator.pop(context);
+              _chatService.clearHistory();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text('Configuración'),
+            onTap: () {
+              Navigator.pop(context);
+              // TODO: Implementar pantalla de configuración
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVoiceModeIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          VoiceWaveIndicator(
+            isListening: _isListening,
+            size: 150,
+            glowColor: Theme.of(context).primaryColor,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _textSpeech.isEmpty ? 'Escuchando...' : _textSpeech,
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.white70,
+            ),
+          ),
+        ],
+      ),
+    ).animate()
+      .fade()
+      .scale();
+  }
+
+  Widget _buildInputArea(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: theme.primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: Icon(
+                  _currentMode == ChatMode.voice ? Icons.keyboard : Icons.mic,
+                  color: theme.primaryColor,
+                ),
+                onPressed: _toggleInputMode,
+              ),
+            ).animate()
+              .scale()
+              .fade(),
+            const SizedBox(width: 8),
+            if (_currentMode == ChatMode.text) ...[
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: theme.scaffoldBackgroundColor,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: theme.dividerColor.withOpacity(0.1),
+                    ),
+                  ),
+                  child: TextField(
+                    controller: _textController,
+                    maxLines: 5,
+                    minLines: 1,
+                    decoration: const InputDecoration(
+                      hintText: 'Escribe un mensaje...',
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.all(16),
+                    ),
+                    onSubmitted: _handleSubmitted,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.primaryColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: theme.primaryColor.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.send, color: Colors.white),
+                  onPressed: () => _handleSubmitted(_textController.text),
+                ),
+              ).animate()
+                .shimmer(
+                  duration: 2000.ms,
+                  color: Colors.white24,
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedMessage(ChatMessage message, int index) {
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0, 0.5),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(
+        parent: AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 300),
+        )..forward(),
+        curve: Curves.easeOutQuad,
+      )),
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+          parent: AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 300),
+          )..forward(),
+          curve: Curves.easeOut,
+        )),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          child: AnimatedChatBubble(
+            message: message,
+            onQuickReplySelected: () {
+              if (message.quickReplies != null && message.quickReplies!.isNotEmpty) {
+                _handleSubmitted(message.quickReplies![0]);
+              }
+            },
+            onPlayAudio: _speak,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _toggleInputMode() {
+    setState(() {
+      _currentMode = _currentMode == ChatMode.voice
+          ? ChatMode.text
+          : ChatMode.voice;
+      if (_currentMode == ChatMode.voice) {
+        _listen();
+      } else {
+        _speech.stop();
+        _isListening = false;
+      }
+    });
+  }
+
+  Future<void> _speak(String text) async {
+    await _flutterTts.speak(text);
+  }
+
+  Future<void> _handleSubmitted(String text) async {
+    if (text.trim().isEmpty) return;
+    
+    _textController.clear();
+    setState(() => _isTyping = true);
+    
+    await _chatService.sendMessage(text);
+    
+    setState(() => _isTyping = false);
+    _scrollToBottom();
+  }
+
+  Future<void> _listen() async {
+    if (!_isListening) {
+      final hasPermission = await Permission.microphone.isGranted;
+      if (!hasPermission) {
+        await _requestMicrophonePermission();
+        return;
+      }
+
+      bool available = await _speech.initialize(
+        onStatus: (status) {
+          print('Speech status: $status');
+          if (status == 'done' || status == 'notListening') {
+            setState(() => _isListening = false);
+          }
+        },
+        onError: (error) {
+          print('Speech error: $error');
+          setState(() => _isListening = false);
+        },
+      );
+
+      if (available) {
+        setState(() => _isListening = true);
+        await _speech.listen(
+          onResult: (result) {
+            setState(() {
+              _textSpeech = result.recognizedWords;
+              if (result.finalResult) {
+                _handleSubmitted(_textSpeech);
+                _textSpeech = '';
+              }
+            });
+          },
+          localeId: 'es_ES',
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      await _speech.stop();
+      if (_textSpeech.isNotEmpty) {
+        _handleSubmitted(_textSpeech);
+        _textSpeech = '';
+      }
+    }
+  }
+
+  Future<void> _requestMicrophonePermission() async {
+    final status = await Permission.microphone.request();
+    
+    if (status.isPermanentlyDenied) {
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Permiso necesario'),
+          content: const Text(
+            'Para usar el chat por voz, necesitamos acceso al micrófono. '
+            'Por favor, habilita el permiso en la configuración de la aplicación.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await openAppSettings();
+              },
+              child: const Text('Abrir Ajustes'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!status.isGranted) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Se necesita permiso del micrófono para esta función'),
+        ),
+      );
+      return;
+    }
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _scrollController.dispose();
+    _speech.cancel();
+    _flutterTts.stop();
+    super.dispose();
   }
 }

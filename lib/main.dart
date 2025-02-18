@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'features/onboarding/screens/onboarding_screen.dart';
-import 'screens/main_screen.dart';
 import 'providers/language_provider.dart';
 import 'providers/auth_provider.dart';
 import 'features/progress/providers/progress_provider.dart';
+import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    print('Error loading .env file: $e');
+  }
+
   await Firebase.initializeApp(
     options: const FirebaseOptions(
       apiKey: 'AIzaSyCUkC_W8ehn4Hjt2IPCmgGuHzZHgqfk5EM',
@@ -21,57 +26,28 @@ void main() async {
       storageBucket: 'mylanguageapp-41cf8.firebasestorage.app',
     ),
   );
-  await dotenv.load(fileName: ".env");
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => LanguageProvider()),
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ProgressProvider()),
-      ],
-      child: const MyApp(),
-    ),
-  );
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  Future<bool> _checkFirstTime() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool isFirstTime = prefs.getBool('first_time') ?? true;
-    if (isFirstTime) {
-      await prefs.setBool('first_time', false);
-    }
-    return isFirstTime;
-  }
-
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'IdeOmas',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
-      debugShowCheckedModeBanner: false,
-      home: FutureBuilder<bool>(
-        future: _checkFirstTime(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-          }
-          
-          if (snapshot.hasData && snapshot.data!) {
-            return const OnboardingScreen();
-          }
-          
-          return const MainScreen();
-        },
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ProgressProvider()),
+      ],
+      child: MaterialApp(
+        title: 'IdeOmas',
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: ThemeMode.system,
+        debugShowCheckedModeBanner: false,
+        home: const MainScreen(),
       ),
     );
   }

@@ -45,62 +45,48 @@ class LanguageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Establecer el idioma seleccionado
+  // Establecer el idioma seleccionado (interfaz de la app)
   Future<void> setLanguage(String language) async {
     if (!availableLanguages.contains(language.toLowerCase())) {
       throw ArgumentError('Idioma no soportado: $language');
     }
-
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_languageKey, language.toLowerCase());
-    _selectedLanguage = language.toLowerCase();
+    await prefs.setString(_languageKey, language);
+    _selectedLanguage = language;
     notifyListeners();
   }
 
-  // Establecer el idioma objetivo para el chat
+  // Establecer el idioma objetivo (idioma que se quiere aprender)
   Future<void> setTargetLanguage(String languageCode) async {
     if (!supportedLanguages.any((lang) => lang['code'] == languageCode)) {
       throw ArgumentError('Código de idioma no soportado: $languageCode');
     }
-
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_targetLanguageKey, languageCode);
     _targetLanguage = languageCode;
     notifyListeners();
   }
 
-  // Actualizar el nivel del idioma
-  Future<void> updateLanguageLevel(ProficiencyLevel level) async {
+  // Establecer el nivel de competencia
+  Future<void> setLevel(ProficiencyLevel level) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_levelKey, level.index);
     _currentLevel = level;
     notifyListeners();
   }
 
-  // Obtener el nombre del idioma en español
-  String getLanguageNameInSpanish(String language) {
-    final Map<String, String> languageNames = {
-      'english': 'Inglés',
-      'french': 'Francés',
-      'german': 'Alemán',
-      'italian': 'Italiano',
-      'portuguese': 'Portugués',
-      'spanish': 'Español',
-    };
-    return languageNames[language.toLowerCase()] ?? language;
+  // Obtener el nombre del idioma a partir de su código
+  String getLanguageName(String code) {
+    final language = supportedLanguages.firstWhere(
+      (lang) => lang['code'] == code,
+      orElse: () => {'code': code, 'name': code},
+    );
+    return language['name'] ?? code;
   }
 
-  // Obtener el código de idioma a partir del nombre
-  String getLanguageCode(String languageName) {
-    final Map<String, String> languageCodes = {
-      'Inglés': 'en',
-      'Francés': 'fr',
-      'Alemán': 'de',
-      'Italiano': 'it',
-      'Portugués': 'pt',
-      'Español': 'es',
-    };
-    return languageCodes[languageName] ?? 'en';
+  // Verificar si un idioma está soportado
+  bool isLanguageSupported(String code) {
+    return supportedLanguages.any((lang) => lang['code'] == code);
   }
 
   // Limpiar los datos del idioma
