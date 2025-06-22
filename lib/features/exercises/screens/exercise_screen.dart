@@ -4,12 +4,12 @@ import 'package:lottie/lottie.dart';
 
 class ExerciseScreen extends StatefulWidget {
   final Exercise exercise;
-  final Function(bool) onComplete;
+  final Function(bool)? onComplete;
 
   const ExerciseScreen({
     super.key,
     required this.exercise,
-    required this.onComplete,
+    this.onComplete,
   });
 
   @override
@@ -82,15 +82,35 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
 
               if (isCorrect != null) ...[
                 const SizedBox(height: 24),
-                // Animación de resultado
-                Center(
-                  child: Lottie.asset(
-                    isCorrect! 
-                      ? 'assets/animations/success.json'
-                      : 'assets/animations/error.json',
-                    width: 150,
-                    height: 150,
-                    repeat: false,
+                // Resultado visual
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isCorrect! ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isCorrect! ? Colors.green : Colors.red,
+                      width: 2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isCorrect! ? Icons.check_circle : Icons.cancel,
+                        color: isCorrect! ? Colors.green : Colors.red,
+                        size: 32,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          isCorrect! ? '¡Correcto!' : 'Incorrecto',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: isCorrect! ? Colors.green : Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -108,6 +128,16 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(widget.exercise.explanation),
+                        if (!isCorrect!) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Respuesta correcta: ${widget.exercise.correctAnswer}',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -115,7 +145,7 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () {
-                    widget.onComplete(isCorrect!);
+                    widget.onComplete?.call(isCorrect!);
                     Navigator.of(context).pop();
                   },
                   child: const Text('Continuar'),

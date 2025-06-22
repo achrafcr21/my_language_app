@@ -4,6 +4,7 @@ import '../features/progress/providers/progress_provider.dart';
 import '../features/progress/models/user_progress.dart';
 import '../features/assessment/screens/assessment_screen.dart';
 import '../features/progress/screens/detailed_progress_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -17,7 +18,12 @@ class HomeScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
-              // TODO: Implementar pantalla de configuración
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
             },
           ),
         ],
