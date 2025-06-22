@@ -33,6 +33,39 @@ class ChatMessage {
     this.originalText,
   });
 
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    return ChatMessage(
+      content: json['content'] as String,
+      isUser: json['isUser'] as bool,
+      timestamp: DateTime.parse(json['timestamp'] as String),
+      type: MessageType.values.firstWhere(
+        (e) => e.toString() == json['type'],
+        orElse: () => MessageType.text,
+      ),
+      quickReplies: (json['quickReplies'] as List<dynamic>?)?.cast<String>(),
+      translation: json['translation'] as String?,
+      corrections: (json['corrections'] as Map<String, dynamic>?)?.cast<String, String>(),
+      audioUrl: json['audioUrl'] as String?,
+      hasError: json['hasError'] as bool? ?? false,
+      originalText: json['originalText'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'content': content,
+      'isUser': isUser,
+      'timestamp': timestamp.toIso8601String(),
+      'type': type.toString(),
+      if (quickReplies != null && quickReplies!.isNotEmpty) 'quickReplies': quickReplies,
+      if (translation != null) 'translation': translation,
+      if (corrections != null && corrections!.isNotEmpty) 'corrections': corrections,
+      if (audioUrl != null) 'audioUrl': audioUrl,
+      if (hasError) 'hasError': hasError,
+      if (originalText != null) 'originalText': originalText,
+    };
+  }
+
   ChatMessage copyWith({
     String? content,
     bool? isUser,
@@ -59,36 +92,6 @@ class ChatMessage {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'content': content,
-      'isUser': isUser,
-      'timestamp': timestamp.toIso8601String(),
-      'type': type.toString(),
-      'quickReplies': quickReplies,
-      'translation': translation,
-      'corrections': corrections,
-      'audioUrl': audioUrl,
-      'hasError': hasError,
-      'originalText': originalText,
-    };
-  }
-
-  factory ChatMessage.fromJson(Map<String, dynamic> json) {
-    return ChatMessage(
-      content: json['content'] as String,
-      isUser: json['isUser'] as bool,
-      timestamp: DateTime.parse(json['timestamp'] as String),
-      type: MessageType.values.firstWhere(
-        (e) => e.toString() == json['type'],
-        orElse: () => MessageType.text,
-      ),
-      quickReplies: (json['quickReplies'] as List<dynamic>?)?.cast<String>(),
-      translation: json['translation'] as String?,
-      corrections: (json['corrections'] as Map<String, dynamic>?)?.cast<String, String>(),
-      audioUrl: json['audioUrl'] as String?,
-      hasError: json['hasError'] as bool? ?? false,
-      originalText: json['originalText'] as String?,
-    );
-  }
+  @override
+  String toString() => 'ChatMessage(content: $content, isUser: $isUser, type: $type)';
 }

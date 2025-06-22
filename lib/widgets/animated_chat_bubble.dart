@@ -16,6 +16,8 @@ class AnimatedChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
@@ -26,16 +28,21 @@ class AnimatedChatBubble extends StatelessWidget {
             mainAxisAlignment:
                 message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
             children: [
-              if (!message.isUser) _buildBotAvatar(),
+              if (!message.isUser) _buildBotAvatar(theme),
               const SizedBox(width: 8),
               Flexible(
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: message.isUser
-                        ? Theme.of(context).primaryColor
-                        : Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.circular(20),
+                        ? theme.primaryColor
+                        : theme.cardColor.withOpacity(0.9),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(message.isUser ? 20 : 4),
+                      topRight: Radius.circular(message.isUser ? 4 : 20),
+                      bottomLeft: const Radius.circular(20),
+                      bottomRight: const Radius.circular(20),
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.1),
@@ -50,7 +57,9 @@ class AnimatedChatBubble extends StatelessWidget {
                       Text(
                         message.content,
                         style: TextStyle(
-                          color: message.isUser ? Colors.white : Colors.white70,
+                          color: message.isUser 
+                              ? Colors.white 
+                              : theme.textTheme.bodyLarge?.color ?? Colors.black,
                           fontSize: 16,
                         ),
                       ),
@@ -64,7 +73,7 @@ class AnimatedChatBubble extends StatelessWidget {
                     .fade(duration: 300.ms)
                     .scale(begin: const Offset(0.8, 0.8), duration: 300.ms),
               ),
-              if (message.isUser) _buildUserAvatar(),
+              if (message.isUser) _buildUserAvatar(theme),
             ],
           ),
           if (!message.isUser)
@@ -75,7 +84,7 @@ class AnimatedChatBubble extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.volume_up, size: 20),
                     onPressed: () => onPlayAudio(message.content),
-                    color: Colors.white54,
+                    color: theme.iconTheme.color?.withOpacity(0.6),
                   ),
                 ],
               ),
@@ -86,50 +95,59 @@ class AnimatedChatBubble extends StatelessWidget {
   }
 
   Widget _buildQuickReplies(BuildContext context) {
+    final theme = Theme.of(context);
     return Wrap(
       spacing: 8,
       children: message.quickReplies!.map((reply) {
-        return Chip(
+        return ActionChip(
           label: Text(
             reply,
-            style: const TextStyle(fontSize: 12, color: Colors.white70),
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.textTheme.bodyLarge?.color ?? Colors.black,
+            ),
           ),
-          backgroundColor: Theme.of(context).cardColor.withOpacity(0.3),
-          onDeleted: onQuickReplySelected,
-          deleteIcon: const Icon(Icons.arrow_forward_ios, size: 12),
+          backgroundColor: theme.chipTheme.backgroundColor ?? theme.cardColor,
+          onPressed: onQuickReplySelected,
+          avatar: Icon(
+            Icons.arrow_forward_ios,
+            size: 12,
+            color: theme.iconTheme.color,
+          ),
         );
       }).toList(),
     );
   }
 
-  Widget _buildBotAvatar() {
+  Widget _buildBotAvatar(ThemeData theme) {
     return Container(
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: Colors.purple[300],
-        shape: BoxShape.circle,
+        color: theme.primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: const Icon(
-        Icons.school,
+      child: Icon(
+        Icons.smart_toy_outlined,
         size: 18,
-        color: Colors.white,
+        color: theme.primaryColor,
       ),
     );
   }
 
-  Widget _buildUserAvatar() {
+  Widget _buildUserAvatar(ThemeData theme) {
     return Container(
       width: 32,
       height: 32,
-      decoration: const BoxDecoration(
-        color: Colors.blue,
-        shape: BoxShape.circle,
+      margin: const EdgeInsets.only(left: 8),
+      decoration: BoxDecoration(
+        color: theme.primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: const Icon(
-        Icons.person,
+      child: Icon(
+        Icons.person_outline,
         size: 18,
-        color: Colors.white,
+        color: theme.primaryColor,
       ),
     );
   }
